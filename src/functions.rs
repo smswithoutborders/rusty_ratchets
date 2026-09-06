@@ -5,6 +5,7 @@ use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 use sha2::Sha512;
 use hmac::{Hmac, KeyInit, Mac};
 use rand::RngExt;
+use crate::header::HEADER;
 
 type Result<T> = std::result::Result<T, FunctionsError>;
 const ENCRYPTION_DECRYPTION_INFO: &[u8] = "RUSTY_RACHET_CHACHA_POLY1305_ENCRYPTION_DECRYPTION".as_bytes();
@@ -183,6 +184,24 @@ pub fn decrypt(
         }),
         Err(e) => Err(FunctionsError::FailedToDecrypt { err: e.to_string() }),
     }
+}
+
+
+
+#[uniffi::export]
+pub fn concat(
+    ad: &[u8],
+    header: HEADER,
+) -> Result<Vec<u8>> {
+    let mut bytes: Vec<u8> = Vec::new();
+
+    bytes.extend(ad);
+
+    let serialized_header = header.serialize()
+        .expect("header should be serializable");
+
+    bytes.extend(serialized_header);
+    Ok(bytes)
 }
 
 #[test]
