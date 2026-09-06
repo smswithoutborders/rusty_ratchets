@@ -1,29 +1,52 @@
-use std::sync::Arc;
-use hkdf::{GenericHkdf, Hkdf};
-use x25519_dalek::{EphemeralSecret, PublicKey, SharedSecret, StaticSecret};
-// use sha2::digest::{KeyInit, Mac};
+use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::ChaCha20Poly1305;
+use hkdf::{Hkdf};
+use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 use sha2::Sha512;
 use hmac::{Hmac, KeyInit, Mac};
-// Imports both required traits
-
-#[derive(Debug)]
-pub enum FunctionsError {
-
-}
+use rand::RngExt;
 
 type Result<T> = std::result::Result<T, FunctionsError>;
+const ENCRYPTION_DECRYPTION_INFO: &[u8] = "RUSTY_RACHET_CHACHA_POLY1305_ENCRYPTION_DECRYPTION".as_bytes();
+type HkdfSha512 = Hkdf<Sha512>;
+type HmacSha512 = Hmac<Sha512>;
 
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum FunctionsError {
+    #[error("Failed to encrypt: {err}")]
+    FailedToEncrypt {
+        err: String,
+    },
+
+    #[error("Failed to decrypt: {err}")]
+    FailedToDecrypt {
+        err: String,
+    },
+}
+
+#[derive(PartialEq, Debug, uniffi::Record)]
+pub struct EncryptedPayload {
+    payload: Vec<u8>,
+    mk: Vec<u8>,
+}
+
+#[derive(PartialEq, Debug, uniffi::Record)]
+pub struct DecryptedPayload {
+    payload: Vec<u8>,
+    mk: Vec<u8>,
+}
 
 #[derive(Debug)]
 pub struct KdfRkOutput {
-    rk: Vec<u8>,
-    ck: Vec<u8>,
+    rk: [u8; 32],
+    ck: [u8; 32],
 }
 
 #[derive(Debug)]
 pub struct KdfCkOutput {
-    ck: Vec<u8>,
-    mk: Vec<u8>,
+    ck: [u8; 64],
+    mk: [u8; 64],
 }
 
 fn generate_dh() -> Result<StaticSecret> {
@@ -38,14 +61,10 @@ fn dh(
     Ok(shared_secret)
 }
 
-type HkdfSha512 = Hkdf<Sha512>;
-type HmacSha512 = Hmac<Sha512>;
-
 fn kdf_rk(
     rk: &[u8],
     dh_out: &[u8],
 ) -> Result<KdfRkOutput>{
-    let mut keys = [0u8; 64];
     let info = "RUSTY_RACHET_KDF_RK_SHA512".as_bytes();
 
     let hkdf = HkdfSha512::new(
@@ -53,30 +72,119 @@ fn kdf_rk(
         dh_out.as_ref()
     );
 
+    let mut keys = [0u8; 64];
     hkdf.expand(
         &info,
         &mut keys
     ).expect("64 should be a valid length here");
 
+    let rk: [u8; 32] = keys[0..32].try_into().expect("32 bytes");
+    let ck: [u8; 32] = keys[32..64].try_into().expect("32 bytes");
     Ok(KdfRkOutput {
-        rk: keys[0..32].to_vec(),
-        ck: keys[32..64].to_vec(),
+        rk,
+        ck
     })
 }
 
-fn kdf_ck(ck: &[u8]) -> Result<KdfCkOutput> {
-    let mut mac = HmacSha512::new_from_slice(ck)
+fn kdf_ck(_ck: &[u8]) -> Result<KdfCkOutput> {
+    let mut mac = HmacSha512::new_from_slice(_ck)
         .expect("HMAC can take a key of any length");
+    mac.update(&[1u8]);
+    let mk = mac.finalize().into_bytes().0;
 
-    mac.update(b"RUSTY_RACHET_KDF_CK");
-    mac.update(b"RUSTY_RACHET_KDF_CK");
-    let keys = mac.finalize().into_bytes(); // 64-byte GenericArray
+    let mut mac = HmacSha512::new_from_slice(_ck)
+        .expect("HMAC can take a key of any length");
+    mac.update(&[2u8]);
+    let ck= mac.finalize().into_bytes().0;
 
     Ok(KdfCkOutput {
-        ck: keys[0..32].to_vec(),
-        mk: keys[32..64].to_vec(),
+        ck,
+        mk,
     })
 }
+
+
+#[uniffi::export]
+pub fn encrypt(
+    mk: &[u8],
+    plaintext: &[u8],
+    associated_data: &[u8],
+) -> Result<EncryptedPayload> {
+    let salt = [0u8; 80];
+
+    let hkdf = HkdfSha512::new(
+        Some(salt.as_ref()),
+        mk.as_ref()
+    );
+
+    let mut outputs = [0u8; 80];
+    hkdf.expand(
+        &ENCRYPTION_DECRYPTION_INFO,
+        &mut outputs
+    ).expect("80 should be a valid length here");
+
+    let key: [u8; 32] = outputs[0..32].try_into().expect("32 bytes");
+    // let authentication_key = outputs[32..64].try_into().expect("32 bytes");
+    let nonce = outputs[64..76].try_into().expect("12 bytes");
+
+    let payload = Payload {
+        msg: &plaintext,
+        aad: associated_data
+    };
+
+    let cipher = ChaCha20Poly1305::new_from_slice(&key)
+        .expect("ChaCha20Poly1305::new_from_slice failed");
+
+    match cipher.encrypt(&nonce, payload) {
+        Ok(ciphertext) => Ok(EncryptedPayload {
+            payload: ciphertext,
+            mk: key.to_vec(),
+        }),
+        Err(e) => Err(FunctionsError::FailedToEncrypt { err: e.to_string() }),
+    }
+}
+
+
+#[uniffi::export]
+pub fn decrypt(
+    mk: &[u8],
+    ciphertext: &[u8],
+    associated_data: &[u8],
+) -> Result<DecryptedPayload> {
+    let salt = [0u8; 80];
+
+    let hkdf = HkdfSha512::new(
+        Some(salt.as_ref()),
+        mk.as_ref()
+    );
+
+    let mut outputs = [0u8; 80];
+    hkdf.expand(
+        &ENCRYPTION_DECRYPTION_INFO,
+        &mut outputs
+    ).expect("80 should be a valid length here");
+
+    let key: [u8; 32] = outputs[0..32].try_into().expect("32 bytes");
+    // let authentication_key = outputs[32..64].try_into().expect("32 bytes");
+    let nonce = outputs[64..76].try_into().expect("12 bytes");
+
+    let cipher = ChaCha20Poly1305::new_from_slice(&key)
+        .expect("ChaCha20Poly1305::new_from_slice failed");
+
+    let payload = Payload {
+        msg: &ciphertext,
+        aad: associated_data
+    };
+
+    match cipher.decrypt(&nonce, payload) {
+        Ok(ciphertext) => Ok(DecryptedPayload {
+            payload: ciphertext,
+            mk: key.to_vec(),
+        }),
+        Err(e) => Err(FunctionsError::FailedToDecrypt { err: e.to_string() }),
+    }
+}
+
 #[test]
 fn test_generate_dh() {
     let alice_keypair = generate_dh().unwrap();
@@ -89,4 +197,25 @@ fn test_generate_dh() {
     let bob_ss = dh(bob_keypair, alice_public_key).unwrap();
 
     assert_eq!(alice_ss.as_bytes(), bob_ss.as_bytes());
+}
+
+#[test]
+fn test_encryption_decryption() {
+    let mk: [u8; 32] = rand::rng().random();
+    let plaintext: [u8; 32] = rand::rng().random();
+    let ad: [u8; 32] = rand::rng().random();
+
+    let encrypted_payload = encrypt(
+        mk.as_ref(),
+        plaintext.as_ref(),
+        ad.as_ref(),
+    ).unwrap();
+
+    let decrypted_payload = decrypt(
+        mk.as_ref(),
+        encrypted_payload.payload.as_ref(),
+        ad.as_ref(),
+    ).unwrap();
+
+    assert_eq!(decrypted_payload.payload, plaintext.as_ref());
 }
