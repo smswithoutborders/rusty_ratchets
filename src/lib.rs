@@ -15,5 +15,6 @@ mod tests {
 }
 
 pub mod functions;
+mod header;
 
 uniffi::setup_scaffolding!();  // ← replaces the UDL file
