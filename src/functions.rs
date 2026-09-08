@@ -50,11 +50,11 @@ pub struct KdfCkOutput {
     mk: [u8; 64],
 }
 
-fn generate_dh() -> Result<StaticSecret> {
+pub fn generate_dh() -> Result<StaticSecret> {
     Ok(StaticSecret::random())
 }
 
-fn dh(
+pub fn dh(
     dh_pair: StaticSecret,
     dh_pub: PublicKey,
 ) -> Result<SharedSecret>{
@@ -62,10 +62,10 @@ fn dh(
     Ok(shared_secret)
 }
 
-fn kdf_rk(
+pub fn kdf_rk(
     rk: &[u8],
-    dh_out: &[u8],
-) -> Result<KdfRkOutput>{
+    dh_out: SharedSecret,
+) -> Result<([u8; 32], Option<[u8; 32]>)> {
     let info = "RUSTY_RACHET_KDF_RK_SHA512".as_bytes();
 
     let hkdf = HkdfSha512::new(
@@ -81,10 +81,7 @@ fn kdf_rk(
 
     let rk: [u8; 32] = keys[0..32].try_into().expect("32 bytes");
     let ck: [u8; 32] = keys[32..64].try_into().expect("32 bytes");
-    Ok(KdfRkOutput {
-        rk,
-        ck
-    })
+    Ok((rk, Some(ck)))
 }
 
 fn kdf_ck(_ck: &[u8]) -> Result<KdfCkOutput> {

@@ -582,6 +582,8 @@ dependencies = [
  "hkdf",
  "hmac",
  "rand",
+ "serde",
+ "serde_json",
  "sha2",
  "thiserror",
  "uniffi",
