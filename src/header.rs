@@ -1,7 +1,4 @@
-use std::sync::Arc;
-use serde::Serialize;
-use x25519_dalek::{PublicKey, StaticSecret};
-use crate::functions::FunctionsError;
+use x25519_dalek::PublicKey;
 
 type Result<T> = std::result::Result<T, HeaderError>;
 

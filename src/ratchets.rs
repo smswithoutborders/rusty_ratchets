@@ -1,9 +1,8 @@
+use crate::functions::{EncryptedPayload, concat, dh, encrypt, generate_dh, kdf_ck, kdf_rk};
+use crate::header::HEADER;
+use crate::states::States;
 use std::collections::HashMap;
-use std::sync::Arc;
-use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
-use crate::functions::{dh, generate_dh, kdf_ck, kdf_rk, EncryptedPayload, encrypt, concat};
-use crate::header::{HeaderError, HEADER};
-use crate::states::{States};
+use x25519_dalek::{PublicKey, StaticSecret};
 
 type Result<T> = std::result::Result<T, RatchetsError>;
 

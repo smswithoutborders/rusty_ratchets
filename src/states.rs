@@ -1,18 +1,12 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
-use serde::{Deserialize, Serialize};
-use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
-use crate::header::HeaderError;
-use crate::states::StatesError::FailedToDeserialize;
-
-type Result<T> = std::result::Result<T, StatesError>;
+use x25519_dalek::{PublicKey, StaticSecret};
 
 #[derive(Debug)]
 pub enum StatesError {
     FailedToDeserialize,
 }
-
 
 #[derive(Clone)]
 pub struct States {

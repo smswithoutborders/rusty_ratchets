@@ -1,11 +1,11 @@
-use chacha20poly1305::aead::{Aead, Payload};
+use crate::header::HEADER;
 use chacha20poly1305::ChaCha20Poly1305;
-use hkdf::{Hkdf};
-use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
-use sha2::{Sha256, Sha512};
+use chacha20poly1305::aead::{Aead, Payload};
+use hkdf::Hkdf;
 use hmac::{Hmac, KeyInit, Mac};
 use rand::RngExt;
-use crate::header::HEADER;
+use sha2::Sha256;
+use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 
 type Result<T> = std::result::Result<T, FunctionsError>;
 const ENCRYPTION_DECRYPTION_INFO: &[u8] = "RUSTY_RACHET_CHACHA_POLY1305_ENCRYPTION_DECRYPTION".as_bytes();
@@ -36,18 +36,6 @@ pub struct EncryptedPayload {
 pub struct DecryptedPayload {
     payload: Vec<u8>,
     mk: Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct KdfRkOutput {
-    rk: [u8; 32],
-    ck: [u8; 32],
-}
-
-#[derive(Debug)]
-pub struct KdfCkOutput {
-    ck: [u8; 64],
-    mk: [u8; 64],
 }
 
 pub fn generate_dh() -> Result<StaticSecret> {
