@@ -12,9 +12,9 @@ pub enum HeaderError {
 
 #[derive(Debug, Clone)]
 pub struct HEADER {
-    dh_pair: PublicKey,
-    pn: u16,
-    n: u16
+    pub dh: PublicKey,
+    pub pn: u16,
+    pub n: u16
 }
 
 impl HEADER {
@@ -24,7 +24,7 @@ impl HEADER {
         n: u16,
     ) -> Result<Self>{
         Ok(Self {
-            dh_pair,
+            dh: dh_pair,
             pn,
             n
         })
@@ -32,7 +32,7 @@ impl HEADER {
 
     pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend(self.dh_pair.to_bytes());
+        bytes.extend(self.dh.to_bytes());
         bytes.extend(self.pn.to_le_bytes());
         bytes.extend(self.n.to_le_bytes());
 
@@ -45,7 +45,7 @@ impl HEADER {
         let n = u16::from_le_bytes(data[34..36].try_into().expect("2 bytes"));
 
         Ok(HEADER {
-            dh_pair: PublicKey::from(dh_pair),
+            dh: PublicKey::from(dh_pair),
             pn,
             n
         })

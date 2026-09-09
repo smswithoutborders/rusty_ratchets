@@ -1,4 +1,4 @@
-use crate::functions::{EncryptedPayload, concat, dh, encrypt, generate_dh, kdf_ck, kdf_rk};
+use crate::functions::{concat, decrypt, dh, encrypt, generate_dh, kdf_ck, kdf_rk, EncryptedPayload, DecryptedPayload};
 use crate::header::HEADER;
 use crate::states::States;
 use std::collections::HashMap;
@@ -10,6 +10,7 @@ type Result<T> = std::result::Result<T, RatchetsError>;
 pub enum RatchetsError {
     RatchetInitFailedForAlice,
     RatchetInitFailedForBob,
+    ExceededMaxSkipMessages,
 }
 
 #[derive(Debug)]
@@ -18,6 +19,14 @@ pub struct RatchetEncryptedPayload {
     header: HEADER,
     payload: EncryptedPayload,
 }
+
+#[derive(Debug)]
+pub struct RatchetDecryptedPayload {
+    state: States,
+    payload: DecryptedPayload,
+}
+
+const MAX_SKIP: u8 = 255u8;
 
 
 pub fn ratchet_init_alice(
@@ -30,7 +39,7 @@ pub fn ratchet_init_alice(
         .expect("Invalid public key");
     state.dhr = Some(PublicKey::from(bob_dh_public_key));
     let (rk, cks) = kdf_rk(
-        sk,
+        sk.try_into().expect("Should be 32 bytes"),
         dh(
             state.dhs.clone(),
             state.dhr.clone().expect("Failed to generate DH keys"),
@@ -101,5 +110,91 @@ pub fn ratchet_encrypt(
         state: state.try_into().expect("State should be RustyState"),
         header,
         payload: ciphertext,
+    })
+}
+
+fn try_skipped_message_keys(mut state: States, header: HEADER) -> Result<(States, Option<[u8; 32]>)>{
+    match state.mk_skipped.get(&(header.dh, header.n)) {
+        None => { Ok((state, None)) }
+        Some(_) => {
+            let mk = state.mk_skipped[&(header.dh, header.n)];
+            state.mk_skipped.remove(&(header.dh, header.n));
+            Ok((state, Some(mk)))
+        }
+    }
+}
+
+fn skip_message_keys(mut state: States, until: u16) -> Result<States>{
+    if (state.nr + MAX_SKIP as u16) < until {
+        return Err(RatchetsError::ExceededMaxSkipMessages);
+    }
+
+    if state.ckr.is_some() {
+        while state.nr < until {
+            let (cks, mk) = kdf_ck(state.ckr
+                .expect("chain key should be present")
+                .as_slice())
+                .expect("Chain key should be present");
+            state.ckr = Some(cks);
+            state.mk_skipped.insert(
+                (state.dhr.expect("Public key should be presetn"), state.nr),
+                mk
+            );
+            state.nr += 1;
+        }
+    }
+
+    Ok(state)
+}
+
+fn dh_ratchet(mut state: States, header: HEADER) -> Result<States>{
+    state.pn = state.ns;
+    state.ns = 0;
+    state.nr = 0;
+    state.dhr = Some(header.dh);
+    let (rk, ckr) = kdf_rk(
+        state.rk,
+        dh(state.dhs, state.dhr.expect("Chain key should be present"))
+            .expect("Failed to derive key")
+    ).expect("Failed to derive key");
+    state.rk = rk;
+    state.ckr = Some(ckr);
+    state.dhs = generate_dh().expect("Failed to generate DH keys");
+    let (rk, ckr) = kdf_rk(
+        state.rk,
+        dh(state.dhs.clone(), state.dhr.expect("Chain key should be present"))
+            .expect("Failed to derive key")
+    ).expect("Failed to derive key");
+    state.rk = rk;
+    state.cks = Some(ckr);
+
+    Ok(state)
+}
+
+fn ratchet_receive_key(state: States, header: HEADER) -> Result<(States, [u8; 32])> {
+    let (mut state, mk) = try_skipped_message_keys(state.clone(), header.clone())
+        .expect("Failed to skip message keys");
+    if mk.is_some() { return Ok((state, mk.unwrap())) }
+
+    if header.dh != state.dhr.expect("DH key should be present") {
+        state = skip_message_keys(state.clone(), header.pn).expect("should be state");
+        state = dh_ratchet(state.clone(), header.clone()).expect("should be state");
+    }
+    state = skip_message_keys(state.clone(), header.n).expect("should be state");
+    let (ckr, mk) = kdf_ck(state.ckr.expect("chain key should be present").as_slice())
+        .expect("Chain key should be present");
+    state.ckr = Some(ckr);
+    state.nr += 1;
+    Ok((state, mk))
+}
+
+pub fn ratchet_decrypt(state: States, header: HEADER, ciphertext: &[u8], ad: &[u8]) -> Result<RatchetDecryptedPayload>{
+    let (state, mk) = ratchet_receive_key(state, header.clone()).expect("Failed to ratchet receive key");
+    let decrypted_payload = decrypt(mk, ciphertext, concat(ad, header).expect("should concat").as_ref())
+        .expect("Ciphertext should be decrypted");
+
+    Ok(RatchetDecryptedPayload {
+        state,
+        payload: decrypted_payload,
     })
 }

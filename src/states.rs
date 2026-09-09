@@ -18,7 +18,7 @@ pub struct States {
     pub ns: u16,
     pub nr: u16,
     pub pn: u16,
-    pub mk_skipped: HashMap<PublicKey, i32>
+    pub mk_skipped: HashMap<(PublicKey, u16), [u8; 32]>,
 }
 
 impl fmt::Debug for States {

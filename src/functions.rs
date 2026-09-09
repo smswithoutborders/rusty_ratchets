@@ -51,7 +51,7 @@ pub fn dh(
 }
 
 pub fn kdf_rk(
-    rk: &[u8],
+    rk: [u8; 32],
     dh_out: SharedSecret,
 ) -> Result<([u8; 32], [u8; 32])> {
     let info = "RUSTY_RACHET_KDF_RK_SHA512".as_bytes();
@@ -127,7 +127,7 @@ pub fn encrypt(
 }
 
 pub fn decrypt(
-    mk: &[u8],
+    mk: [u8; 32],
     ciphertext: &[u8],
     associated_data: &[u8],
 ) -> Result<DecryptedPayload> {
@@ -207,7 +207,7 @@ fn test_encryption_decryption() {
     ).unwrap();
 
     let decrypted_payload = decrypt(
-        mk.as_ref(),
+        mk,
         encrypted_payload.payload.as_ref(),
         ad.as_ref(),
     ).unwrap();
