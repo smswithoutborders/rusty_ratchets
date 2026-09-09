@@ -18,5 +18,3 @@ pub mod functions;
 mod header;
 pub mod states;
 mod ratchets;
-
-uniffi::setup_scaffolding!();  // ← replaces the UDL file

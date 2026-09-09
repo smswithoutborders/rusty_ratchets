@@ -8,16 +8,13 @@ x25519-dalek = { version = "3.0.0", features = ["static_secrets", "reusable_secr
 hkdf = "0.13.0"
 sha2 = "0.11.0"
 hmac = "0.13.0"
-uniffi = { version = "0.32.0", features = ["cli"] }
 chacha20poly1305 = "0.11.0-rc.3"
 thiserror = "2.0.20"
 rand = "0.10.2"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 
 [lib]
 name="rusty_ratchet"
 crate-type = ["cdylib"]
 
 [build-dependencies]
-uniffi = { version = "0.32.0", features = [ "build" ] }

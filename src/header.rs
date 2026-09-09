@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use x25519_dalek::StaticSecret;
+use serde::Serialize;
+use x25519_dalek::{PublicKey, StaticSecret};
 use crate::functions::FunctionsError;
 
 type Result<T> = std::result::Result<T, HeaderError>;
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum HeaderError {
     // #[error("Failed to encrypt: {err}")]
     // FailedToEncrypt {
@@ -12,23 +13,21 @@ pub enum HeaderError {
     // },
 }
 
-#[derive(PartialEq, Debug, uniffi::Record, Clone)]
+#[derive(Debug, Clone)]
 pub struct HEADER {
-    dh_pair: Vec<u8>,
+    dh_pair: PublicKey,
     pn: u16,
     n: u16
 }
 
-#[uniffi::export]
 impl HEADER {
-    #[uniffi::constructor]
     pub fn new(
-        dh_pair: &[u8],
+        dh_pair: PublicKey,
         pn: u16,
         n: u16,
     ) -> Result<Self>{
         Ok(Self {
-            dh_pair: dh_pair.to_vec(),
+            dh_pair,
             pn,
             n
         })
@@ -36,22 +35,20 @@ impl HEADER {
 
     pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut bytes: Vec<u8> = Vec::new();
-
-        bytes.extend(self.dh_pair.clone());
+        bytes.extend(self.dh_pair.to_bytes());
         bytes.extend(self.pn.to_le_bytes());
         bytes.extend(self.n.to_le_bytes());
 
         Ok(bytes)
     }
 
-    #[uniffi::constructor]
     pub fn deserialize(data: &[u8]) -> Result<Self> {
-        let dh_pair = data[0..32].to_vec();
+        let dh_pair: [u8; 32] = data[0..32].try_into().expect("dh_pair should be 32 bytes");
         let pn = u16::from_le_bytes(data[32..34].try_into().expect("2 bytes"));
         let n = u16::from_le_bytes(data[34..36].try_into().expect("2 bytes"));
 
         Ok(HEADER {
-            dh_pair,
+            dh_pair: PublicKey::from(dh_pair),
             pn,
             n
         })

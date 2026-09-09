@@ -13,7 +13,7 @@ type HkdfSha256 = Hkdf<Sha256>;
 type HmacSha256 = Hmac<Sha256>;
 
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum FunctionsError {
     #[error("Failed to encrypt: {err}")]
     FailedToEncrypt {
@@ -26,13 +26,13 @@ pub enum FunctionsError {
     },
 }
 
-#[derive(PartialEq, Debug, uniffi::Record)]
+#[derive(PartialEq, Debug)]
 pub struct EncryptedPayload {
     payload: Vec<u8>,
     mk: Vec<u8>,
 }
 
-#[derive(PartialEq, Debug, uniffi::Record)]
+#[derive(PartialEq, Debug)]
 pub struct DecryptedPayload {
     payload: Vec<u8>,
     mk: Vec<u8>,
@@ -138,8 +138,6 @@ pub fn encrypt(
     }
 }
 
-
-#[uniffi::export]
 pub fn decrypt(
     mk: &[u8],
     ciphertext: &[u8],

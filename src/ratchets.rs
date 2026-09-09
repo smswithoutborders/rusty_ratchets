@@ -3,29 +3,29 @@ use std::sync::Arc;
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
 use crate::functions::{dh, generate_dh, kdf_ck, kdf_rk, EncryptedPayload, encrypt, concat};
 use crate::header::{HeaderError, HEADER};
-use crate::states::{RustyState, States};
+use crate::states::{States};
 
 type Result<T> = std::result::Result<T, RatchetsError>;
 
-#[derive(Debug, uniffi::Error, thiserror::Error)]
+#[derive(Debug)]
 pub enum RatchetsError {
-    #[error("Ratchet init failed for Alice")]
     RatchetInitFailedForAlice,
-    #[error("Ratchet init failed for Bob")]
     RatchetInitFailedForBob,
 }
 
-#[uniffi::export]
+#[derive(Debug)]
+pub struct RatchetEncryptedPayload {
+    state: States,
+    header: HEADER,
+    payload: EncryptedPayload,
+}
+
+
 pub fn ratchet_init_alice(
-    state: Arc<RustyState>,
+    mut state: States,
     sk: &[u8],
     bob_dh_public_key: &[u8],
-) -> Result<RustyState>{
-    let mut state: States = match Arc::into_inner(state) {
-        Some(state) => state.try_into().expect("Ratchet State wrong"),
-        None => return Err(RatchetsError::RatchetInitFailedForAlice)
-    };
-
+) -> Result<States>{
     state.dhs = generate_dh().expect("Failed to generate DH keys");
     let bob_dh_public_key: [u8; 32] = bob_dh_public_key.try_into()
         .expect("Invalid public key");
@@ -49,17 +49,12 @@ pub fn ratchet_init_alice(
 }
 
 
-#[uniffi::export]
 pub fn ratchet_init_bob(
-    state: Arc<RustyState>,
+    state: States,
     sk: &[u8],
     bob_dh_key_pair: &[u8],
-) -> Result<RustyState>{
-    let mut state: States = match Arc::into_inner(state) {
-        Some(state) => state.try_into().expect("Ratchet State wrong"),
-        None => return Err(RatchetsError::RatchetInitFailedForBob)
-    };
-
+) -> Result<States>{
+    let mut state: States = state.try_into().expect("Ratchet State wrong");
     let bob_dh_key_pair: [u8; 32] = bob_dh_key_pair.try_into().expect("Invalid public key");
     let bob_dh_key_pair = StaticSecret::from(bob_dh_key_pair);
 
@@ -86,26 +81,16 @@ fn ratchet_send_key(mut state: States) -> Result<(States, u16, [u8; 32])> {
 }
 
 
-#[derive(Debug, uniffi::Object)]
-struct RatchetEncryptedPayload {
-    state: RustyState,
-    header: HEADER,
-    payload: EncryptedPayload,
-}
-
-#[uniffi::export]
-fn ratchet_encrypt(
-    state: Arc<RustyState>,
+pub fn ratchet_encrypt(
+    state: States,
     plaintext: &[u8],
     ad: &[u8]
-) -> Result<Arc<RatchetEncryptedPayload>>{
-    let state: States = match Arc::into_inner(state) {
-        Some(state) => state.try_into().expect("Ratchet State wrong"),
-        None => return Err(RatchetsError::RatchetInitFailedForBob)
-    };
+) -> Result<RatchetEncryptedPayload>{
+    let state: States = state.try_into().expect("Ratchet State wrong");
     let (state, ns, mk) = ratchet_send_key(state.clone())
         .expect("Failed to ratchet encrypt key");
-    let header = HEADER::new(state.dhs.as_ref(), state.pn, ns)
+    let public_key = PublicKey::from(&state.dhs);
+    let header = HEADER::new(public_key, state.pn, ns)
         .expect("Failed to ratchet encrypt header");
     let ciphertext = encrypt(
         mk,
@@ -113,9 +98,9 @@ fn ratchet_encrypt(
         concat(ad, header.clone()).expect("values should concat").as_ref()
     ).expect("Plaintext should be encrypted");
 
-    Ok(Arc::new(RatchetEncryptedPayload {
+    Ok(RatchetEncryptedPayload {
         state: state.try_into().expect("State should be RustyState"),
         header,
         payload: ciphertext,
-    }))
+    })
 }
