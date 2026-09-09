@@ -1,0 +1,12 @@
+[package]
+name = "rusty-ratchet-bridge"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21"
+rusty_ratchet = { path = "../rusty_ratchet" }
+zeroize = { version = "1.9", features = ["derive"] }

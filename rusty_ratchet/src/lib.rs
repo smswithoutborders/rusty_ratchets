@@ -14,7 +14,8 @@ mod tests {
     }
 }
 
-pub mod functions;
+mod functions;
 mod header;
 pub mod states;
-mod ratchets;
+pub mod ratchets;
+
