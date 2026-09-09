@@ -2,15 +2,15 @@ use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::ChaCha20Poly1305;
 use hkdf::{Hkdf};
 use x25519_dalek::{PublicKey, SharedSecret, StaticSecret};
-use sha2::Sha512;
+use sha2::{Sha256, Sha512};
 use hmac::{Hmac, KeyInit, Mac};
 use rand::RngExt;
 use crate::header::HEADER;
 
 type Result<T> = std::result::Result<T, FunctionsError>;
 const ENCRYPTION_DECRYPTION_INFO: &[u8] = "RUSTY_RACHET_CHACHA_POLY1305_ENCRYPTION_DECRYPTION".as_bytes();
-type HkdfSha512 = Hkdf<Sha512>;
-type HmacSha512 = Hmac<Sha512>;
+type HkdfSha256 = Hkdf<Sha256>;
+type HmacSha256 = Hmac<Sha256>;
 
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -65,10 +65,10 @@ pub fn dh(
 pub fn kdf_rk(
     rk: &[u8],
     dh_out: SharedSecret,
-) -> Result<([u8; 32], Option<[u8; 32]>)> {
+) -> Result<([u8; 32], [u8; 32])> {
     let info = "RUSTY_RACHET_KDF_RK_SHA512".as_bytes();
 
-    let hkdf = HkdfSha512::new(
+    let hkdf = HkdfSha256::new(
         Some(rk.as_ref()),
         dh_out.as_ref()
     );
@@ -81,36 +81,32 @@ pub fn kdf_rk(
 
     let rk: [u8; 32] = keys[0..32].try_into().expect("32 bytes");
     let ck: [u8; 32] = keys[32..64].try_into().expect("32 bytes");
-    Ok((rk, Some(ck)))
+    Ok((rk, ck))
 }
 
-fn kdf_ck(_ck: &[u8]) -> Result<KdfCkOutput> {
-    let mut mac = HmacSha512::new_from_slice(_ck)
+pub fn kdf_ck(_ck: &[u8]) -> Result<([u8; 32], [u8; 32])> {
+    let mut mac = HmacSha256::new_from_slice(_ck)
         .expect("HMAC can take a key of any length");
     mac.update(&[1u8]);
     let mk = mac.finalize().into_bytes().0;
 
-    let mut mac = HmacSha512::new_from_slice(_ck)
+    let mut mac = HmacSha256::new_from_slice(_ck)
         .expect("HMAC can take a key of any length");
     mac.update(&[2u8]);
     let ck= mac.finalize().into_bytes().0;
 
-    Ok(KdfCkOutput {
-        ck,
-        mk,
-    })
+    Ok((ck, mk))
 }
 
 
-#[uniffi::export]
 pub fn encrypt(
-    mk: &[u8],
+    mk: [u8; 32],
     plaintext: &[u8],
     associated_data: &[u8],
 ) -> Result<EncryptedPayload> {
     let salt = [0u8; 80];
 
-    let hkdf = HkdfSha512::new(
+    let hkdf = HkdfSha256::new(
         Some(salt.as_ref()),
         mk.as_ref()
     );
@@ -151,7 +147,7 @@ pub fn decrypt(
 ) -> Result<DecryptedPayload> {
     let salt = [0u8; 80];
 
-    let hkdf = HkdfSha512::new(
+    let hkdf = HkdfSha256::new(
         Some(salt.as_ref()),
         mk.as_ref()
     );
@@ -183,9 +179,6 @@ pub fn decrypt(
     }
 }
 
-
-
-#[uniffi::export]
 pub fn concat(
     ad: &[u8],
     header: HEADER,
@@ -222,7 +215,7 @@ fn test_encryption_decryption() {
     let ad: [u8; 32] = rand::rng().random();
 
     let encrypted_payload = encrypt(
-        mk.as_ref(),
+        mk,
         plaintext.as_ref(),
         ad.as_ref(),
     ).unwrap();

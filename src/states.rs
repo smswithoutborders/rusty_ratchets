@@ -11,15 +11,16 @@ pub enum StatesError {
     FailedToDeserialize,
 }
 
+#[derive(Clone)]
 pub struct States {
     pub dhs: StaticSecret,
     pub dhr: Option<PublicKey>,
     pub rk: [u8; 32],
     pub cks: Option<[u8; 32]>,
     pub ckr: Option<[u8; 32]>,
-    pub ns: i32,
-    pub nr: i32,
-    pub pn: i32,
+    pub ns: u16,
+    pub nr: u16,
+    pub pn: u16,
     pub mk_skipped: HashMap<PublicKey, i32>
 }
 
@@ -37,9 +38,9 @@ pub struct RustyState {
     rk: Vec<u8>,
     cks: Option<Vec<u8>>,
     ckr: Option<Vec<u8>>,
-    ns: i32,
-    nr: i32,
-    pn: i32,
+    ns: u16,
+    nr: u16,
+    pn: u16,
     mk_skipped: HashMap<Vec<u8>, i32>
 }
 

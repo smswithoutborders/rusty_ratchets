@@ -12,7 +12,7 @@ pub enum HeaderError {
     // },
 }
 
-#[derive(PartialEq, Debug, uniffi::Record)]
+#[derive(PartialEq, Debug, uniffi::Record, Clone)]
 pub struct HEADER {
     dh_pair: Vec<u8>,
     pn: u16,
@@ -23,12 +23,12 @@ pub struct HEADER {
 impl HEADER {
     #[uniffi::constructor]
     pub fn new(
-        dh_pair: Vec<u8>,
+        dh_pair: &[u8],
         pn: u16,
         n: u16,
     ) -> Result<Self>{
         Ok(Self {
-            dh_pair,
+            dh_pair: dh_pair.to_vec(),
             pn,
             n
         })
