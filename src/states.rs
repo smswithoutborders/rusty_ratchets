@@ -8,9 +8,9 @@ pub enum StatesError {
     FailedToDeserialize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct States {
-    pub dhs: StaticSecret,
+    pub dhs: Option<StaticSecret>,
     pub dhr: Option<PublicKey>,
     pub rk: [u8; 32],
     pub cks: Option<[u8; 32]>,

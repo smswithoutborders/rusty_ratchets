@@ -26,17 +26,6 @@ pub enum FunctionsError {
     },
 }
 
-#[derive(PartialEq, Debug)]
-pub struct EncryptedPayload {
-    payload: Vec<u8>,
-    mk: Vec<u8>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct DecryptedPayload {
-    payload: Vec<u8>,
-    mk: Vec<u8>,
-}
 
 pub fn generate_dh() -> Result<StaticSecret> {
     Ok(StaticSecret::random())
@@ -91,7 +80,7 @@ pub fn encrypt(
     mk: [u8; 32],
     plaintext: &[u8],
     associated_data: &[u8],
-) -> Result<EncryptedPayload> {
+) -> Result<(Vec<u8>, [u8; 32])> {
     let salt = [0u8; 80];
 
     let hkdf = HkdfSha256::new(
@@ -118,10 +107,7 @@ pub fn encrypt(
         .expect("ChaCha20Poly1305::new_from_slice failed");
 
     match cipher.encrypt(&nonce, payload) {
-        Ok(ciphertext) => Ok(EncryptedPayload {
-            payload: ciphertext,
-            mk: key.to_vec(),
-        }),
+        Ok(ciphertext) => Ok((ciphertext, mk)),
         Err(e) => Err(FunctionsError::FailedToEncrypt { err: e.to_string() }),
     }
 }
@@ -130,7 +116,7 @@ pub fn decrypt(
     mk: [u8; 32],
     ciphertext: &[u8],
     associated_data: &[u8],
-) -> Result<DecryptedPayload> {
+) -> Result<(Vec<u8>, [u8; 32])> {
     let salt = [0u8; 80];
 
     let hkdf = HkdfSha256::new(
@@ -157,10 +143,7 @@ pub fn decrypt(
     };
 
     match cipher.decrypt(&nonce, payload) {
-        Ok(ciphertext) => Ok(DecryptedPayload {
-            payload: ciphertext,
-            mk: key.to_vec(),
-        }),
+        Ok(ciphertext) => Ok((ciphertext, mk)),
         Err(e) => Err(FunctionsError::FailedToDecrypt { err: e.to_string() }),
     }
 }
@@ -200,17 +183,18 @@ fn test_encryption_decryption() {
     let plaintext: [u8; 32] = rand::rng().random();
     let ad: [u8; 32] = rand::rng().random();
 
-    let encrypted_payload = encrypt(
+    let (ciphertext, enc_mk) = encrypt(
         mk,
         plaintext.as_ref(),
         ad.as_ref(),
     ).unwrap();
 
-    let decrypted_payload = decrypt(
+    let (new_plaintext, dec_mk) = decrypt(
         mk,
-        encrypted_payload.payload.as_ref(),
+        ciphertext.as_ref(),
         ad.as_ref(),
     ).unwrap();
 
-    assert_eq!(decrypted_payload.payload, plaintext.as_ref());
+    assert_eq!(new_plaintext, plaintext);
+    assert_eq!(dec_mk, enc_mk)
 }
