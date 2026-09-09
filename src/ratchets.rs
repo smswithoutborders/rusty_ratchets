@@ -260,18 +260,39 @@ fn test_ratchet_encrypt_decrypt() {
 
     assert_eq!(decrypted_payload.payload, plaintext.to_vec());
 
-    let encrypted_payload = ratchet_encrypt(
+    let mut encrypted_payload = ratchet_encrypt(
         bob_state,
         plaintext.as_ref(),
         ad.as_ref()
     ).unwrap();
+    bob_state = encrypted_payload.state;
 
     let decrypted_payload = ratchet_decrypt(
         alice_state,
+        encrypted_payload.header.clone(),
+        encrypted_payload.payload.as_slice(),
+        ad.as_ref()
+    ).unwrap();
+    alice_state = decrypted_payload.state;
+
+    assert_eq!(decrypted_payload.payload, plaintext.to_vec());
+
+
+    // simulate missed messages
+    for i in (0..100) {
+        encrypted_payload = ratchet_encrypt(
+            alice_state.clone(),
+            plaintext.as_ref(),
+            ad.as_ref()
+        ).unwrap();
+        alice_state = encrypted_payload.state;
+    }
+
+    let decrypted_payload = ratchet_decrypt(
+        bob_state.clone(),
         encrypted_payload.header,
         encrypted_payload.payload.as_slice(),
         ad.as_ref()
     ).unwrap();
-
     assert_eq!(decrypted_payload.payload, plaintext.to_vec());
 }
