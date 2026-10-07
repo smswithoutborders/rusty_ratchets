@@ -16,15 +16,15 @@ pub enum RatchetsError {
 
 #[derive(Debug)]
 pub struct RatchetEncryptedPayload {
-    state: States,
-    header: HEADER,
-    payload: Vec<u8>,
+    pub state: States,
+    pub header: HEADER,
+    pub payload: Vec<u8>,
 }
 
 #[derive(Debug)]
 pub struct RatchetDecryptedPayload {
-    state: States,
-    payload: Vec<u8>,
+    pub state: States,
+    pub payload: Vec<u8>,
 }
 
 const MAX_SKIP: u8 = 255u8;
