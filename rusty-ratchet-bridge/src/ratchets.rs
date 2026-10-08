@@ -8,11 +8,11 @@ use zeroize::Zeroizing;
 pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_initAlice<'local>(
     _env: JNIEnv<'local >,
     _class: JClass<'local>,
-    handle: jlong,
+    state: JByteArray<'local>,
     sk: JByteArray<'local>,
     bob_dh_public_key: JByteArray<'local>,
-) -> jlong {
-    let state = unsafe { &*(handle as *const States) };
+) -> JByteArray<'local> {
+    // let state = unsafe { &*(handle as *const States) };
 
     let sk: Zeroizing<Vec<u8>> = Zeroizing::new(_env
         .convert_byte_array(&sk)
@@ -23,25 +23,34 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_initAli
         .convert_byte_array(&bob_dh_public_key)
         .expect("I should get a vector");
 
+    let state: Vec<u8> = _env
+        .convert_byte_array(&state)
+        .expect("I should get a vector");
+
+    let state = States::deserialize(state.as_slice())
+        .expect("I should have a state object");
     let state = rusty_ratchet::ratchets::ratchet_init_alice(
-        state.clone(),
+        state,
         sk.as_slice(),
         bob_dh_public_key.as_slice(),
     ).expect("I should initialize a ratchet state");
 
-    let state = Box::new(state);
-    Box::into_raw(state) as jlong
+    _env.byte_array_from_slice(
+        state.serialize()
+            .expect("Should be a serialized state")
+            .as_slice()
+    ).expect("Is valid byte array")
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_initBob<'local>(
     _env: JNIEnv<'local >,
     _class: JClass<'local>,
-    handle: jlong,
+    state: JByteArray<'local>,
     sk: JByteArray<'local>,
     bob_keypair: JByteArray<'local>,
-) -> jlong {
-    let state = unsafe { &*(handle as *const States) };
+) -> JByteArray<'local> {
+    // let state = unsafe { &*(handle as *const States) };
 
     let sk: Zeroizing<Vec<u8>> = Zeroizing::new(_env
         .convert_byte_array(&sk)
@@ -52,14 +61,24 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_initBob
         .convert_byte_array(&bob_keypair)
         .expect("I should get a vector");
 
+    let state: Vec<u8> = _env
+        .convert_byte_array(&state)
+        .expect("I should get a vector");
+
+    let state = States::deserialize(state.as_slice())
+        .expect("I should have a state object");
+
     let state = rusty_ratchet::ratchets::ratchet_init_bob(
-        state.clone(),
+        state,
         sk.as_slice(),
         bob_keypair.as_slice()
     ).expect("I should get a state");
 
-    let state = Box::new(state);
-    Box::into_raw(state) as jlong
+    _env.byte_array_from_slice(
+        state.serialize()
+            .expect("Should be a serialized state")
+            .as_slice()
+    ).expect("Is valid byte array")
 }
 
 
@@ -67,11 +86,11 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_initBob
 pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_encrypt<'local>(
     _env: JNIEnv<'local >,
     _class: JClass<'local>,
-    handle: jlong,
+    state: JByteArray<'local>,
     plaintext: JByteArray<'local>,
     ad: JByteArray<'local>,
-) -> (jlong, JByteArray<'local>, JByteArray<'local>) {
-    let state = unsafe { &*(handle as *const States) };
+) -> (JByteArray<'local>, JByteArray<'local>, JByteArray<'local>) {
+    // let state = unsafe { &*(handle as *const States) };
 
     let plaintext: Vec<u8> = _env
         .convert_byte_array(&plaintext)
@@ -81,8 +100,15 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_encrypt
         .convert_byte_array(&ad)
         .expect("I should get a vector");
 
+    let state: Vec<u8> = _env
+        .convert_byte_array(&state)
+        .expect("I should get a vector");
+
+    let state = States::deserialize(state.as_slice())
+        .expect("I should have a state object");
+
     let encrypted_payload = rusty_ratchet::ratchets::ratchet_encrypt(
-        state.clone(),
+        state,
         plaintext.as_slice(),
         ad.as_slice(),
     ).expect("I should have an encrypted payload");
@@ -93,7 +119,11 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_encrypt
         .serialize()
         .expect("I should get a header");
     (
-        Box::into_raw(state) as jlong,
+        _env.byte_array_from_slice(
+            state.serialize()
+                .expect("Should be a serialized state")
+                .as_slice()
+        ).expect("Is valid byte array"),
         _env.byte_array_from_slice(&payload).expect("I should get a vector"),
         _env.byte_array_from_slice(&header).expect("I should get a vector"),
     )
@@ -103,12 +133,12 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_encrypt
 pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_decrypt<'local>(
     _env: JNIEnv<'local >,
     _class: JClass<'local>,
-    handle: jlong,
+    state: JByteArray<'local>,
     ciphertext: JByteArray<'local>,
     header: JByteArray<'local>,
     ad: JByteArray<'local>,
-) -> (jlong, JByteArray<'local>) {
-    let state = unsafe { &*(handle as *const States) };
+) -> (JByteArray<'local>, JByteArray<'local>) {
+    // let state = unsafe { &*(handle as *const States) };
 
     let header= _env
         .convert_byte_array(&header)
@@ -125,8 +155,15 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_decrypt
         .convert_byte_array(&ad)
         .expect("I should get a vector");
 
+    let state: Vec<u8> = _env
+        .convert_byte_array(&state)
+        .expect("I should get a vector");
+
+    let state = States::deserialize(state.as_slice())
+        .expect("I should have a state object");
+
     let decrypted_payload = rusty_ratchet::ratchets::ratchet_decrypt(
-        state.clone(),
+        state,
         header,
         ciphertext.as_slice(),
         ad.as_slice(),
@@ -135,7 +172,11 @@ pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_decrypt
     let state = Box::new(decrypted_payload.state.clone());
     let payload = decrypted_payload.payload.clone();
     (
-        Box::into_raw(state) as jlong,
+        _env.byte_array_from_slice(
+            state.serialize()
+                .expect("Should be a serialized state")
+                .as_slice()
+        ).expect("Is valid byte array"),
         _env.byte_array_from_slice(&payload).expect("I should get a vector"),
     )
 }
