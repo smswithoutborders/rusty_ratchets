@@ -35,16 +35,22 @@ pub fn ratchet_init_alice(
     sk: &[u8],
     bob_dh_public_key: &[u8],
 ) -> Result<States>{
-    state.dhs = Some(generate_dh().expect("Failed to generate DH keys"));
-    let bob_dh_public_key: [u8; 32] = bob_dh_public_key.try_into()
-        .expect("Invalid public key");
-    state.dhr = Some(PublicKey::from(bob_dh_public_key));
+    state.dhs = Some(
+        generate_dh()
+            .expect("Failed to generate DH keys")
+            .as_bytes()
+            .to_vec()
+    );
+    state.dhr = Some(bob_dh_public_key.to_vec());
+
+    let dhs: [u8; 32] = state.dhs.clone().unwrap().try_into().expect("dhs should be present");
+    let dhs = StaticSecret::from(dhs);
+
+    let dhr: [u8; 32] = state.dhr.clone().unwrap().try_into().expect("dhs should be present");
+    let dhr = PublicKey::from(dhr);
     let (rk, cks) = kdf_rk(
         sk.try_into().expect("Should be 32 bytes"),
-        dh(
-            state.dhs.clone().expect("Dhs should not be None"),
-            state.dhr.clone().expect("Failed to generate DH keys"),
-        ).expect("Failed to derive key")
+        dh( dhs, dhr, ).expect("Failed to derive key")
     ).expect("Failed to derive key");
     state.rk = rk;
     state.cks = Some(cks);
@@ -64,10 +70,8 @@ pub fn ratchet_init_bob(
     bob_dh_key_pair: &[u8],
 ) -> Result<States>{
     let mut state: States = state.try_into().expect("Ratchet State wrong");
-    let bob_dh_key_pair: [u8; 32] = bob_dh_key_pair.try_into().expect("Invalid public key");
-    let bob_dh_key_pair = StaticSecret::from(bob_dh_key_pair);
 
-    state.dhs = Some(bob_dh_key_pair);
+    state.dhs = Some(bob_dh_key_pair.to_vec());
     state.dhr = None;
     state.rk = sk.try_into().expect("sk wrong");
     state.cks = None;
@@ -98,8 +102,10 @@ pub fn ratchet_encrypt(
     let state: States = state.try_into().expect("Ratchet State wrong");
     let (state, ns, mk) = ratchet_send_key(state.clone())
         .expect("Failed to ratchet encrypt key");
-    let public_key = PublicKey::from(&state.dhs.clone()
-        .expect("DHs should not be None"));
+
+    let dhs: [u8; 32] = state.dhs.clone().unwrap().try_into().expect("dhs should be present");
+    let dhs = StaticSecret::from(dhs);
+    let public_key = PublicKey::from(&dhs);
     let header = HEADER::new(public_key, state.pn, ns)
         .expect("Failed to ratchet encrypt header");
     let (ciphertext, _) = encrypt(
@@ -116,11 +122,11 @@ pub fn ratchet_encrypt(
 }
 
 fn try_skipped_message_keys(mut state: States, header: HEADER) -> Result<(States, Option<[u8; 32]>)>{
-    match state.mk_skipped.get(&(header.dh, header.n)) {
+    match state.mk_skipped.get(&(header.dh.as_bytes().to_vec(), header.n)) {
         None => { Ok((state, None)) }
         Some(_) => {
-            let mk = state.mk_skipped[&(header.dh, header.n)];
-            state.mk_skipped.remove(&(header.dh, header.n));
+            let mk = state.mk_skipped[&(header.dh.as_bytes().to_vec(), header.n)];
+            state.mk_skipped.remove(&(header.dh.as_bytes().to_vec(), header.n));
             Ok((state, Some(mk)))
         }
     }
@@ -138,8 +144,9 @@ fn skip_message_keys(mut state: States, until: u16) -> Result<States>{
                 .as_slice())
                 .expect("Chain key should be present");
             state.ckr = Some(cks);
+
             state.mk_skipped.insert(
-                (state.dhr.expect("Public key should be presetn"), state.nr),
+                (state.dhr.clone().unwrap(), state.nr),
                 mk
             );
             state.nr += 1;
@@ -153,23 +160,34 @@ fn dh_ratchet(mut state: States, header: HEADER) -> Result<States>{
     state.pn = state.ns;
     state.ns = 0;
     state.nr = 0;
-    state.dhr = Some(header.dh);
+    state.dhr = Some(header.dh.as_bytes().to_vec());
+
+    let dhs: [u8; 32] = state.dhs.clone().unwrap().try_into().expect("dhs should be present");
+    let dhs = StaticSecret::from(dhs);
+
+    let dhr: [u8; 32] = state.dhr.clone().unwrap().try_into().expect("dhs should be present");
+    let dhr = PublicKey::from(dhr);
     let (rk, ckr) = kdf_rk(
         state.rk,
-        dh(
-            state.dhs.expect("Dhs should not be None"),
-            state.dhr.expect("Chain key should be present")
-        ).expect("Failed to derive key")
+        dh( dhs, dhr ).expect("Failed to derive key")
     ).expect("Failed to derive key");
     state.rk = rk;
     state.ckr = Some(ckr);
-    state.dhs = Some(generate_dh().expect("Failed to generate DH keys"));
+    state.dhs = Some(generate_dh()
+        .expect("Failed to generate DH keys")
+        .as_bytes()
+        .to_vec()
+    );
+
+    let dhs: [u8; 32] = state.dhs.clone().unwrap().try_into().expect("dhs should be present");
+    let dhs = StaticSecret::from(dhs);
+
+    let dhr: [u8; 32] = state.dhr.clone().unwrap().try_into().expect("dhs should be present");
+    let dhr = PublicKey::from(dhr);
+
     let (rk, ckr) = kdf_rk(
         state.rk,
-        dh(
-            state.dhs.clone().expect("DHs should not be None"),
-            state.dhr.expect("Chain key should be present")
-        ).expect("Failed to derive key")
+        dh( dhs, dhr ).expect("Failed to derive key")
     ).expect("Failed to derive key");
     state.rk = rk;
     state.cks = Some(ckr);
@@ -182,7 +200,7 @@ fn ratchet_receive_key(state: States, header: HEADER) -> Result<(States, [u8; 32
         .expect("Failed to skip message keys");
     if mk.is_some() { return Ok((state, mk.unwrap())) }
 
-    if !state.dhr.is_some() || header.dh != state.dhr.unwrap() {
+    if !state.dhr.is_some() || header.dh.as_bytes().to_vec() != state.dhr.clone().unwrap() {
         state = skip_message_keys(state.clone(), header.pn).expect("should be state");
         state = dh_ratchet(state.clone(), header.clone()).expect("should be state");
     }
