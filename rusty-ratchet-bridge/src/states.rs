@@ -5,7 +5,7 @@ use jni::sys::jlong;
 use rusty_ratchet::states::States;
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_afkanerd_dekusms_rust_RustyRatchetBridge_newState<'local>(
+pub extern "system" fn Java_com_afkanerd_deku_rust_RustyRatchetBridge_newState<'local>(
     _env: JNIEnv<'local>,
     _class: JClass,
 ) -> JByteArray<'local> {

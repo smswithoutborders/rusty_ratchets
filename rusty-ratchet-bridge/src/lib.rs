@@ -1,5 +1,5 @@
-mod states;
-mod ratchets;
+pub mod states;
+pub mod ratchets;
 
 use std::panic::catch_unwind;
 use jni::JNIEnv;
