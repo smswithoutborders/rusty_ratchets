@@ -299,15 +299,15 @@ fn test_ratchet_encrypt_decrypt() {
     // simulate missed messages
     for i in (0..100) {
         encrypted_payload = ratchet_encrypt(
-            alice_state.clone(),
+            bob_state.clone(),
             plaintext.as_ref(),
             ad.as_ref()
         ).unwrap();
-        alice_state = encrypted_payload.state;
+        bob_state = encrypted_payload.state;
     }
 
     let decrypted_payload = ratchet_decrypt(
-        bob_state.clone(),
+        alice_state.clone(),
         encrypted_payload.header,
         encrypted_payload.payload.as_slice(),
         ad.as_ref()

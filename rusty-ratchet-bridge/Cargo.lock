@@ -350,6 +350,7 @@ name = "rusty-ratchet-bridge"
 version = "0.1.0"
 dependencies = [
  "jni",
+ "log",
  "rusty_ratchet",
  "zeroize",
 ]

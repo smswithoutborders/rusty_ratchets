@@ -3,12 +3,14 @@ use std::fmt;
 use std::fmt::Formatter;
 use x25519_dalek::{PublicKey, StaticSecret};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 
 #[derive(Debug)]
 pub enum StatesError {
     FailedToDeserialize,
 }
 
+#[serde_as]
 #[derive(Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct States {
     pub dhs: Option<Vec<u8>>,
@@ -19,6 +21,7 @@ pub struct States {
     pub ns: u16,
     pub nr: u16,
     pub pn: u16,
+    #[serde_as(as = "Vec<(_, _)>")]
     pub mk_skipped: HashMap<(Vec<u8>, u16), [u8; 32]>,
 }
 
@@ -55,8 +58,13 @@ impl fmt::Debug for States {
 
 #[test]
 fn test_serialization_deserialization() {
-    let state = States::default();
+    let mut state = States::default();
 
+    let serialized = state.serialize().unwrap();
+    let deserialized = States::deserialize(&serialized).unwrap();
+    assert_eq!(state, deserialized);
+
+    state.mk_skipped.insert((Vec::new(), 0), [0u8; 32]);
     let serialized = state.serialize().unwrap();
     let deserialized = States::deserialize(&serialized).unwrap();
     assert_eq!(state, deserialized);

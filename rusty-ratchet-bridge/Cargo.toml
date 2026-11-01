@@ -10,3 +10,4 @@ crate-type = ["cdylib"]
 jni = "0.21"
 rusty_ratchet = { path = "../rusty_ratchet" }
 zeroize = { version = "1.9", features = ["derive"] }
+log = "0.4.34"
